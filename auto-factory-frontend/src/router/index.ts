@@ -21,14 +21,19 @@ const routes = [
     component: () => import('@/views/Branch/index.vue')
   },
   {
+    path: '/flash',
+    name: 'Flashing',
+    component: () => import('@/views/Flashing/index.vue')
+  },
+  {
+    path: '/rom-track',
+    name: 'RomTrack',
+    component: () => import('@/views/RomTrack/index.vue')
+  },
+  {
     path: '/task',
     name: 'TaskCenter',
     component: () => import('@/views/Task/index.vue')
-  },
-  {
-    path: '/settings/mail',
-    name: 'MailSettings',
-    component: () => import('@/views/Settings/Mail.vue')
   },
   {
     path: '/testcase',

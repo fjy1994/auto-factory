@@ -2,7 +2,12 @@
 Django settings for auto-factory-backend project.
 """
 
+import os
 from pathlib import Path
+import pymysql
+
+pymysql.install_as_MySQLdb()
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -39,7 +44,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'auto-factory-backend.urls'
+ROOT_URLCONF = 'backend.urls'
 
 TEMPLATES = [
     {
@@ -57,17 +62,17 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'auto-factory-backend.wsgi.application'
-ASGI_APPLICATION = 'auto-factory-backend.asgi.application'
+WSGI_APPLICATION = 'backend.wsgi.application'
+ASGI_APPLICATION = 'backend.asgi.application'
 
 
-# Database
+# Database - 使用 MySQL（如尚未安装 MySQL 可临时切回 SQLite 注释掉下面 9 行）
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'auto_factory',
         'USER': 'root',
-        'PASSWORD': '123456',
+        'PASSWORD': '',
         'HOST': '127.0.0.1',
         'PORT': '3306',
         'OPTIONS': {
@@ -109,8 +114,7 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 100,
+    'DEFAULT_PAGINATION_CLASS': None,
 }
 
 

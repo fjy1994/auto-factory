@@ -1,0 +1,7 @@
+{
+  "api_base": "http://localhost:8000",
+  "mail_folder": "收件箱",
+  "scan_minutes": 60,
+  "subject_keywords": ["转测", "版本发布", "提测", "测试版本"],
+  "default_branch": "默认分支"
+}

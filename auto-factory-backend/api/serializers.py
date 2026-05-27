@@ -1,15 +1,9 @@
 """
-序列化器
+REST API 序列化器
 """
 
 from rest_framework import serializers
-from .models import Device, Branch, Task, VersionQueue, TestCase, Executor, TaskConfig
-
-
-class ExecutorSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Executor
-        fields = '__all__'
+from .models import Device, Branch, Task, VersionQueue, TestCase, CaseSet, TaskConfig, Executor, FlashingProcess, RomRecord
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -21,12 +15,6 @@ class DeviceSerializer(serializers.ModelSerializer):
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
-        fields = '__all__'
-
-
-class TaskConfigSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TaskConfig
         fields = '__all__'
 
 
@@ -48,18 +36,31 @@ class TestCaseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# Agent上报数据序列化
-class AgentReportSerializer(serializers.Serializer):
-    executorId = serializers.CharField()
-    executorIp = serializers.CharField()
-    reportTime = serializers.DateTimeField()
-    
-    class DeviceItemSerializer(serializers.Serializer):
-        serial = serializers.CharField()
-        romVersion = serializers.CharField(default='')
-        browserVersion = serializers.CharField(default='')
-        executorIp = serializers.CharField(default='')
-        status = serializers.CharField(default='idle')
-        remark = serializers.CharField(default='', allow_blank=True)
-    
-    devices = DeviceItemSerializer(many=True)
+class CaseSetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CaseSet
+        fields = '__all__'
+
+
+class TaskConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskConfig
+        fields = '__all__'
+
+
+class ExecutorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Executor
+        fields = '__all__'
+
+
+class FlashingProcessSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FlashingProcess
+        fields = '__all__'
+
+
+class RomRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RomRecord
+        fields = '__all__'
