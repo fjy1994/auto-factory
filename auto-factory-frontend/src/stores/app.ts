@@ -425,43 +425,71 @@ export const useAppStore = defineStore('app', () => {
       {
         id: 1, name: '小米14 V14.0.1 稳定性压力测试', branchName: 'DEV-V14.0.1', branchId: 1, version: 'V14.0.1', model: '小米14',
         taskType: '稳定性', status: 'running', progress: 65, deviceId: 1, deviceSerial: 'SN001',
-        passRate: 65.0, totalCount: 100, passCount: 60, failCount: 5,
+        agentUrl: 'http://192.168.1.100:8000', caseIds: ['TC-001','TC-002','TC-004','TC-003','TC-005'],
+        batchSize: 3, currentBatch: 2,
+        caseResults: [
+          { caseId: 'TC-001', status: 'passed', duration: 12.3 },
+          { caseId: 'TC-002', status: 'passed', duration: 8.7 },
+          { caseId: 'TC-004', status: 'failed', error: 'AssertionError: 搜索结果与实际不符', duration: 15.1 },
+          { caseId: 'TC-003', status: 'passed', duration: 5.2 },
+        ],
+        passRate: 75.0, totalCount: 100, passCount: 3, failCount: 1,
         startTime: '2026-05-27T08:00:00', endTime: undefined, createdAt: '2026-05-27T07:00:00'
       },
       {
         id: 2, name: 'Redmi K70 V15.0 功能回归', branchName: '主干-V15.0', branchId: 2, version: 'V15.0.0', model: 'Redmi K70',
         taskType: '功能回归', status: 'success', progress: 100, deviceId: 3, deviceSerial: 'SN003',
-        passRate: 95.0, totalCount: 200, passCount: 190, failCount: 10,
+        agentUrl: 'http://192.168.1.101:8000', caseIds: ['TC-001','TC-002','TC-003','TC-004','TC-005','TC-006'],
+        batchSize: 5, currentBatch: 2,
+        caseResults: [
+          { caseId: 'TC-001', status: 'passed', duration: 10.2 },
+          { caseId: 'TC-002', status: 'passed', duration: 9.5 },
+          { caseId: 'TC-003', status: 'passed', duration: 7.8 },
+          { caseId: 'TC-004', status: 'passed', duration: 11.3 },
+          { caseId: 'TC-005', status: 'failed', error: 'Timeout: 主题切换超时', duration: 30.1 },
+          { caseId: 'TC-006', status: 'passed', duration: 6.4 },
+        ],
+        passRate: 83.3, totalCount: 200, passCount: 5, failCount: 1,
         startTime: '2026-05-27T05:00:00', endTime: '2026-05-27T07:00:00', createdAt: '2026-05-27T04:00:00'
       },
       {
         id: 3, name: '小米13 V14.0.5 兼容性测试', branchName: '商分-V14.0.5', branchId: 3, version: 'V14.0.5', model: '小米13',
         taskType: '兼容性', status: 'queued', progress: 0, deviceId: 5, deviceSerial: 'SN005',
+        agentUrl: '', caseIds: ['TC-005','TC-006','TC-007'],
+        batchSize: 10, currentBatch: 0, caseResults: [],
         passRate: undefined, totalCount: 150, passCount: 0, failCount: 0,
         startTime: undefined, endTime: undefined, createdAt: '2026-05-27T06:00:00'
       },
       {
         id: 4, name: '小米14 V14.0.1 性能测试', branchName: 'DEV-V14.0.1', branchId: 1, version: 'V14.0.1', model: '小米14',
         taskType: '性能', status: 'failed', progress: 30, deviceId: 2, deviceSerial: 'SN002',
-        passRate: 83.3, totalCount: 80, passCount: 20, failCount: 4,
+        agentUrl: 'http://192.168.1.100:8000', caseIds: ['TC-003','TC-006'],
+        batchSize: 2, currentBatch: 1,
+        caseResults: [
+          { caseId: 'TC-003', status: 'passed', duration: 5.1 },
+          { caseId: 'TC-006', status: 'error', error: 'Agent 连接超时，设备离线', duration: 0 },
+        ],
+        passRate: 50.0, totalCount: 80, passCount: 1, failCount: 1,
         startTime: '2026-05-27T09:00:00', endTime: undefined, createdAt: '2026-05-27T07:30:00'
       },
       {
         id: 5, name: 'Redmi K70 V15.0 压力测试', branchName: '主干-V15.0', branchId: 2, version: 'V15.0.0', model: 'Redmi K70',
         taskType: '压力', status: 'queued', progress: 0, deviceId: 3, deviceSerial: 'SN003',
+        agentUrl: '', caseIds: ['TC-001','TC-002','TC-003','TC-004','TC-005'],
+        batchSize: 5, currentBatch: 0, caseResults: [],
         passRate: undefined, totalCount: 500, passCount: 0, failCount: 0,
         startTime: undefined, endTime: undefined, createdAt: '2026-05-27T08:00:00'
       },
     ]
 
     testCases.value = [
-      { id: 1, caseId: 'TC-001', name: '用户登录功能验证', module: '登录模块', priority: 'L0', steps: '1. 打开应用\n2. 输入用户名密码\n3. 点击登录', expected: '成功登录进入主页', creator: '张三', createTime: '2026-04-01T08:00:00', createdAt: '2026-04-01T08:00:00' },
-      { id: 2, caseId: 'TC-002', name: '用户注册功能验证', module: '登录模块', priority: 'L0', steps: '1. 打开注册页面\n2. 填写必填项\n3. 提交注册', expected: '注册成功并自动登录', creator: '张三', createTime: '2026-04-01T08:00:00', createdAt: '2026-04-01T08:00:00' },
-      { id: 3, caseId: 'TC-003', name: '首页加载性能', module: '性能测试', priority: 'L2', steps: '1. 打开应用\n2. 记录首页加载时间', expected: '首页在3秒内加载完成', creator: '李四', createTime: '2026-04-02T08:00:00', createdAt: '2026-04-02T08:00:00' },
-      { id: 4, caseId: 'TC-004', name: '搜索功能测试', module: '搜索', priority: 'L0', steps: '1. 进入搜索页面\n2. 输入关键词\n3. 查看搜索结果', expected: '搜索结果准确相关', creator: '李四', createTime: '2026-04-02T08:00:00', createdAt: '2026-04-02T08:00:00' },
-      { id: 5, caseId: 'TC-005', name: '主题切换功能', module: 'UI', priority: 'L4', steps: '1. 进入设置\n2. 切换主题\n3. 验证UI显示', expected: '主题切换成功，UI显示正常', creator: '王五', createTime: '2026-04-03T08:00:00', createdAt: '2026-04-03T08:00:00' },
-      { id: 6, caseId: 'TC-006', name: '消息推送验证', module: '消息', priority: 'L2', steps: '1. 触发推送事件\n2. 检查通知栏', expected: '收到正确推送消息', creator: '王五', createTime: '2026-04-03T08:00:00', createdAt: '2026-04-03T08:00:00' },
-      { id: 7, caseId: 'TC-007', name: '文件下载功能', module: '文件管理', priority: 'L2', steps: '1. 点击下载按钮\n2. 等待下载完成\n3. 检查文件', expected: '文件成功下载到本地', creator: '张三', createTime: '2026-04-04T08:00:00', createdAt: '2026-04-04T08:00:00' },
+      { id: 1, caseId: 'TC-001', name: '用户登录功能验证', module: '登录模块', priority: 'L0', scriptPath: 'scripts/test_login.py', steps: '1. 打开应用\n2. 输入用户名密码\n3. 点击登录', expected: '成功登录进入主页', creator: '张三', createTime: '2026-04-01T08:00:00', createdAt: '2026-04-01T08:00:00' },
+      { id: 2, caseId: 'TC-002', name: '用户注册功能验证', module: '登录模块', priority: 'L0', scriptPath: 'scripts/test_register.py', steps: '1. 打开注册页面\n2. 填写必填项\n3. 提交注册', expected: '注册成功并自动登录', creator: '张三', createTime: '2026-04-01T08:00:00', createdAt: '2026-04-01T08:00:00' },
+      { id: 3, caseId: 'TC-003', name: '首页加载性能', module: '性能测试', priority: 'L2', scriptPath: 'scripts/test_homepage.py', steps: '1. 打开应用\n2. 记录首页加载时间', expected: '首页在3秒内加载完成', creator: '李四', createTime: '2026-04-02T08:00:00', createdAt: '2026-04-02T08:00:00' },
+      { id: 4, caseId: 'TC-004', name: '搜索功能测试', module: '搜索', priority: 'L0', scriptPath: 'scripts/test_search.py', steps: '1. 进入搜索页面\n2. 输入关键词\n3. 查看搜索结果', expected: '搜索结果准确相关', creator: '李四', createTime: '2026-04-02T08:00:00', createdAt: '2026-04-02T08:00:00' },
+      { id: 5, caseId: 'TC-005', name: '主题切换功能', module: 'UI', priority: 'L4', scriptPath: 'scripts/test_theme.py', steps: '1. 进入设置\n2. 切换主题\n3. 验证UI显示', expected: '主题切换成功，UI显示正常', creator: '王五', createTime: '2026-04-03T08:00:00', createdAt: '2026-04-03T08:00:00' },
+      { id: 6, caseId: 'TC-006', name: '消息推送验证', module: '消息', priority: 'L2', scriptPath: 'scripts/test_push.py', steps: '1. 触发推送事件\n2. 检查通知栏', expected: '收到正确推送消息', creator: '王五', createTime: '2026-04-03T08:00:00', createdAt: '2026-04-03T08:00:00' },
+      { id: 7, caseId: 'TC-007', name: '文件下载功能', module: '文件管理', priority: 'L2', scriptPath: 'scripts/test_download.py', steps: '1. 点击下载按钮\n2. 等待下载完成\n3. 检查文件', expected: '文件成功下载到本地', creator: '张三', createTime: '2026-04-04T08:00:00', createdAt: '2026-04-04T08:00:00' },
     ]
 
     caseSets.value = [
@@ -471,9 +499,9 @@ export const useAppStore = defineStore('app', () => {
     ]
 
     branchTaskConfigs.value = [
-      { id: 1, branchId: 1, name: '稳定性压力测试', scriptPath: 'scripts/stress_test.py', deviceLimit: 'SN001,SN002', caseSets: [1], order: 1, createdAt: '2026-05-26T08:00:00' },
-      { id: 2, branchId: 1, name: '功能回归测试', scriptPath: 'scripts/regression.py', deviceLimit: 'SN001', caseSets: [1, 3], order: 2, createdAt: '2026-05-26T08:00:00' },
-      { id: 3, branchId: 2, name: '主干全量回归', scriptPath: 'scripts/full_regression.py', deviceLimit: '', caseSets: [1, 2, 3], order: 1, createdAt: '2026-05-26T08:00:00' },
+      { id: 1, branchId: 1, name: '稳定性压力测试', scriptPath: 'scripts/stress_test.py', deviceLimit: 'SN001,SN002', caseSets: [1], batchSize: 5, order: 1, createdAt: '2026-05-26T08:00:00' },
+      { id: 2, branchId: 1, name: '功能回归测试', scriptPath: 'scripts/regression.py', deviceLimit: 'SN001', caseSets: [1, 3], batchSize: 10, order: 2, createdAt: '2026-05-26T08:00:00' },
+      { id: 3, branchId: 2, name: '主干全量回归', scriptPath: 'scripts/full_regression.py', deviceLimit: '', caseSets: [1, 2, 3], batchSize: 8, order: 1, createdAt: '2026-05-26T08:00:00' },
     ]
 
     // 刷机过程模拟数据

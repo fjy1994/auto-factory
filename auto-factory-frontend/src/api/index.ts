@@ -6,7 +6,7 @@
 import axios from 'axios'
 import type {
   Device, Branch, Task, TestCase, CaseSet,
-  FlashingProcess, BranchTaskConfig, RomRecord, FlashingStep
+  FlashingProcess, BranchTaskConfig, RomRecord, FlashingStep, CaseResult
 } from '@/types'
 
 // 开发时通过 Vite proxy 转发到 Django，生产环境通过 gateway 路由
@@ -80,6 +80,11 @@ function mapTask(t: Record<string, unknown>): Task {
     progress: c.progress as number || 0,
     deviceId: c.deviceId as number || 0,
     deviceSerial: c.deviceSerial as string || '',
+    agentUrl: c.agentUrl as string || '',
+    caseIds: (c.caseIds as string[]) || [],
+    batchSize: c.batchSize as number || 10,
+    currentBatch: c.currentBatch as number || 0,
+    caseResults: (c.caseResults as CaseResult[]) || [],
     startTime: c.startTime as string || '',
     endTime: c.endTime as string || '',
     createdAt: c.createdAt as string || '',
@@ -99,6 +104,7 @@ function mapTestCase(tc: Record<string, unknown>): TestCase {
     name: c.name as string,
     module: c.module as string || '',
     priority: (c.priority as string) as TestCase['priority'],
+    scriptPath: c.scriptPath as string || '',
     steps: c.steps as string || '',
     expected: c.expected as string || '',
     creator: c.creator as string || '',
@@ -180,7 +186,9 @@ function mapTaskConfig(tc: Record<string, unknown>): BranchTaskConfig {
     branchId: c.branch as number || 0,
     name: c.name as string,
     scriptPath: c.scriptPath as string || '',
+    deviceLimit: c.deviceLimit as string || '',
     caseSets: (c.caseSets as number[]) || (c.caseSetIds as number[]) || [],
+    batchSize: c.batchSize as number || 10,
     order: c.order as number || 0,
     createdAt: c.createdAt as string || '',
   }
@@ -297,6 +305,24 @@ export async function updateTask(id: number, task: Partial<Task>): Promise<Task>
 
 export async function deleteTask(id: number): Promise<void> {
   await api.delete(`/tasks/${id}/`)
+}
+
+/** 启动任务调度 */
+export async function startTask(id: number, agentUrl: string): Promise<{ message: string; taskId: number }> {
+  const { data } = await api.post(`/tasks/${id}/start/`, { agent_url: agentUrl })
+  return data as { message: string; taskId: number }
+}
+
+/** 提交批次执行结果（Agent 回调） */
+export async function reportBatch(
+  taskId: number, batchIndex: number, results: CaseResult[]
+): Promise<{ message: string; progress: number; status: string }> {
+  const { data } = await api.post('/tasks/report_batch/', {
+    task_id: taskId,
+    batch_index: batchIndex,
+    results,
+  })
+  return data as { message: string; progress: number; status: string }
 }
 
 // ==================== 测试用例 ====================

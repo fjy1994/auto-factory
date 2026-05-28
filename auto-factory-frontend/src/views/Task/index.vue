@@ -111,12 +111,42 @@
               </div>
             </div>
             <div class="detail-actions">
+              <el-button size="small" type="success" plain @click="startTaskExec(task)" v-if="task.status === 'queued'">
+                <el-icon :size="14"><VideoPlay /></el-icon> 开始执行
+              </el-button>
               <el-button size="small" type="primary" plain @click="rerunTask(task)" v-if="task.status === 'failed'">
                 <el-icon :size="14"><Refresh /></el-icon> 重新运行
               </el-button>
               <el-button size="small" type="danger" plain @click="cancelTask(task)" v-if="task.status === 'queued' || task.status === 'running'">
                 <el-icon :size="14"><CircleClose /></el-icon> 取消任务
               </el-button>
+            </div>
+
+            <!-- 用例执行结果 -->
+            <div v-if="task.caseResults && task.caseResults.length > 0" class="case-results-section">
+              <el-divider style="margin: 10px 0;" />
+              <div class="section-title">用例执行结果</div>
+              <div class="case-result-grid">
+                <div
+                  v-for="r in task.caseResults"
+                  :key="r.caseId"
+                  class="case-result-item"
+                  :class="'status-' + r.status"
+                >
+                  <div class="cr-top">
+                    <el-tag :type="r.status === 'passed' ? 'success' : r.status === 'failed' ? 'danger' : 'warning'" size="small" effect="dark" round>
+                      {{ r.status === 'passed' ? '通过' : r.status === 'failed' ? '失败' : '错误' }}
+                    </el-tag>
+                    <span class="cr-id">{{ r.caseId }}</span>
+                  </div>
+                  <div class="cr-meta" v-if="r.duration">
+                    耗时: {{ r.duration.toFixed(1) }}s
+                  </div>
+                  <div class="cr-error" v-if="r.error">
+                    {{ r.error.slice(0, 200) }}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </Transition>
@@ -151,11 +181,12 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  List, Plus, Refresh, Monitor, Share, Clock, CircleClose
+  List, Plus, Refresh, Monitor, Share, Clock, CircleClose, VideoPlay
 } from '@element-plus/icons-vue'
 import type { Task } from '@/types'
+import { startTask } from '@/api'
 
 const appStore = useAppStore()
 const route = useRoute()
@@ -221,6 +252,33 @@ const rerunTask = (task: Task) => {
 
 const cancelTask = (task: Task) => {
   ElMessage.warning(`任务 "${task.name}" 已取消`)
+}
+
+const startTaskExec = async (task: Task) => {
+  // 弹出输入框让用户输入 Agent 地址
+  const { value: agentUrl } = await ElMessageBox.prompt(
+    '请输入 Agent 服务地址（如 http://192.168.1.100:8000）',
+    '启动任务执行',
+    {
+      confirmButtonText: '启动',
+      cancelButtonText: '取消',
+      inputValue: task.agentUrl || '',
+      inputPlaceholder: 'http://192.168.1.100:8000',
+    }
+  ).catch(() => ({ value: null }))
+
+  if (!agentUrl) return
+
+  try {
+    await startTask(task.id, agentUrl)
+    ElMessage.success('任务调度已启动')
+    task.status = 'running'
+    task.agentUrl = agentUrl
+    task.startTime = new Date().toISOString()
+    appStore.fetchAll() // 刷新数据
+  } catch (e: any) {
+    ElMessage.error('启动失败: ' + (e.response?.data?.error || e.message))
+  }
 }
 
 // 从版本跟踪跳转过来时自动选中对应任务
@@ -539,6 +597,78 @@ onMounted(async () => {
 }
 
 /* ==================== 响应式 ==================== */
+/* ==================== 用例执行结果 ==================== */
+.case-results-section {
+  margin-top: 4px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+}
+
+.case-result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.case-result-item {
+  background: #f8f9fb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  border-left: 3px solid #e0e0e0;
+}
+
+.case-result-item.status-passed {
+  border-left-color: #67c23a;
+}
+
+.case-result-item.status-failed {
+  border-left-color: #f56c6c;
+}
+
+.case-result-item.status-error {
+  border-left-color: #e6a23c;
+}
+
+.cr-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.cr-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.cr-meta {
+  font-size: 11px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.cr-error {
+  font-size: 11px;
+  color: #f56c6c;
+  margin-top: 2px;
+  max-height: 60px;
+  overflow-y: auto;
+  background: #fff5f5;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 @media (max-width: 1000px) {
   .stats-row {
     grid-template-columns: repeat(3, 1fr);

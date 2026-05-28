@@ -144,8 +144,10 @@
                   <div class="task-config-order">{{ idx + 1 }}</div>
                   <div class="task-config-info">
                     <div class="task-config-name">{{ task.name }}</div>
-                    <div class="task-config-meta">
-                      <span>关联用例集: {{ task.caseSets.length > 0 ? task.caseSets.join(', ') : '无' }}</span>
+                            <div class="task-config-meta">
+                      <span>用例集: {{ task.caseSets.length > 0 ? task.caseSets.join(', ') : '无' }}</span>
+                      <span class="meta-divider">·</span>
+                      <span>每批 {{ task.batchSize || 10 }} 个</span>
                       <span v-if="task.scriptPath" class="meta-divider">·</span>
                       <span v-if="task.scriptPath">脚本: {{ task.scriptPath }}</span>
                     </div>
@@ -225,6 +227,10 @@
         <el-form-item label="脚本路径">
           <el-input v-model="taskForm.scriptPath" placeholder="/scripts/xxx.sh" />
         </el-form-item>
+        <el-form-item label="每批下发">
+          <el-input-number v-model="taskForm.batchSize" :min="1" :max="100" size="small" />
+          <span style="margin-left: 8px; font-size: 12px; color: #909399;">个用例</span>
+        </el-form-item>
         <el-form-item label="关联用例集">
           <el-select v-model="taskForm.caseSets" multiple placeholder="选择关联的用例集" style="width: 100%">
             <el-option
@@ -274,6 +280,7 @@ const taskForm = ref({
   name: '',
   scriptPath: '',
   caseSets: [] as number[],
+  batchSize: 10,
   order: 1
 })
 
@@ -290,7 +297,7 @@ const sortedTasks = (branchId: number) => {
 const showAddTask = (branchId: number) => {
   editingTaskId.value = null
   editingTaskBranchId.value = branchId
-  taskForm.value = { name: '', scriptPath: '', caseSets: [], order: branchTasks(branchId).length + 1 }
+  taskForm.value = { name: '', scriptPath: '', caseSets: [], batchSize: 10, order: branchTasks(branchId).length + 1 }
   taskDialogVisible.value = true
 }
 
@@ -301,6 +308,7 @@ const editBranchTask = (task: BranchTaskConfig) => {
     name: task.name,
     scriptPath: task.scriptPath || '',
     caseSets: [...task.caseSets],
+    batchSize: task.batchSize || 10,
     order: task.order
   }
   taskDialogVisible.value = true
@@ -317,6 +325,7 @@ const saveBranchTask = () => {
       task.name = taskForm.value.name
       task.scriptPath = taskForm.value.scriptPath
       task.caseSets = [...taskForm.value.caseSets]
+      task.batchSize = taskForm.value.batchSize
       task.order = taskForm.value.order
     }
   } else {
@@ -326,6 +335,7 @@ const saveBranchTask = () => {
       name: taskForm.value.name,
       scriptPath: taskForm.value.scriptPath,
       caseSets: [...taskForm.value.caseSets],
+      batchSize: taskForm.value.batchSize,
       order: taskForm.value.order,
       createdAt: new Date().toISOString()
     })

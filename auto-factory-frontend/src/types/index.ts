@@ -37,8 +37,18 @@ export interface BranchTaskConfig {
   scriptPath?: string
   deviceLimit?: string
   caseSets: number[]
+  batchSize: number
   order: number
   createdAt: string
+}
+
+// 用例执行结果
+export interface CaseResult {
+  caseId: string
+  status: 'passed' | 'failed' | 'error'
+  error?: string
+  duration?: number
+  output?: string
 }
 
 // 设备相关
@@ -99,6 +109,11 @@ export interface Task {
   progress: number
   deviceId: number
   deviceSerial: string
+  agentUrl?: string
+  caseIds?: string[]
+  batchSize?: number
+  currentBatch?: number
+  caseResults?: CaseResult[]
   startTime?: string
   endTime?: string
   createdAt: string
@@ -155,6 +170,7 @@ export interface TestCase {
   name: string
   module: string
   priority: 'L0' | 'L1' | 'L2' | 'L3' | 'L4'
+  scriptPath?: string
   steps: string
   expected: string
   creator: string

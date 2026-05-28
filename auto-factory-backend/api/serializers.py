@@ -64,3 +64,15 @@ class RomRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = RomRecord
         fields = '__all__'
+
+
+class TaskStartSerializer(serializers.Serializer):
+    """启动任务调度（接收 Agent 地址）"""
+    agent_url = serializers.CharField(required=True, help_text='Agent 服务地址')
+
+
+class BatchResultSerializer(serializers.Serializer):
+    """批次结果（供 Agent 回调提交）"""
+    task_id = serializers.IntegerField(required=True)
+    batch_index = serializers.IntegerField(required=True)
+    results = serializers.ListField(required=True, child=serializers.DictField())
