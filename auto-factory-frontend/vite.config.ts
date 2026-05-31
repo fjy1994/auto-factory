@@ -12,7 +12,7 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api': {
+      '/arkweb': {
         target: 'http://127.0.0.1:18789',
         changeOrigin: true
       }

@@ -25,9 +25,9 @@
           placeholder="搜索用例名称 / ID..."
           clearable
           size="small"
-          style="width: 200px"
-          :prefix-icon="Search"
+          style="width: 180px"
         />
+        <el-button size="small" :icon="Search" @click="handleSearch">查询</el-button>
         <el-button size="small" :icon="Upload" @click="showImportDialog">导入用例</el-button>
         <el-button type="primary" size="small" :icon="Plus" @click="showAddDialog">新建用例</el-button>
       </div>
@@ -96,7 +96,7 @@
               <template #default="{ row }">
                 <div class="time-cell">
                   <el-icon :size="12" color="#909399"><Clock /></el-icon>
-                  {{ formatTime(row.createTime) }}
+                  {{ formatTime(row.createdAt) }}
                 </div>
               </template>
             </el-table-column>
@@ -375,7 +375,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -415,7 +415,17 @@ const modules = computed(() => {
   return Array.from(set)
 })
 
-const filteredCases = computed(() => {
+const filteredCases = ref<TestCase[]>([])
+
+const currentPage = ref(1)
+const pageSize = 10
+const pagedCases = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredCases.value.slice(start, start + pageSize)
+})
+
+const handleSearch = () => {
+  currentPage.value = 1
   let result = testCases.value
   if (moduleFilter.value) result = result.filter(c => c.module === moduleFilter.value)
   if (priorityFilter.value) result = result.filter(c => c.priority === priorityFilter.value)
@@ -426,17 +436,8 @@ const filteredCases = computed(() => {
       c.caseId.toLowerCase().includes(kw)
     )
   }
-  return result
-})
-
-const currentPage = ref(1)
-const pageSize = 20
-const pagedCases = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredCases.value.slice(start, start + pageSize)
-})
-
-watch([moduleFilter, priorityFilter, searchKeyword], () => { currentPage.value = 1 })
+  filteredCases.value = result
+}
 
 const caseStats = computed(() => [
   { key: 'total', icon: Document, bg: 'linear-gradient(135deg, #4facfe, #00f2fe)', count: testCases.value.length, label: '总用例' },
@@ -585,7 +586,7 @@ const confirmImport = async () => {
       steps: r.steps || '',
       expected: r.expected || '',
       creator: r.creator || '导入用户',
-      createTime: now
+      createdAt: now
     }))
     appStore.testCases.push(...newCases)
     ElMessage.success(`成功导入 ${newCases.length} 条用例`)
@@ -668,7 +669,7 @@ const saveCase = () => {
       steps: form.value.steps,
       expected: form.value.expected,
       creator: '当前用户',
-      createTime: new Date().toISOString()
+      createdAt: new Date().toISOString()
     })
     ElMessage.success('用例已创建')
   }
@@ -729,7 +730,8 @@ const saveSet = () => {
         ...appStore.caseSets[idx],
         name: setForm.value.name,
         description: setForm.value.description,
-        caseIds: [...setForm.value.caseIds]
+        caseIds: [...setForm.value.caseIds],
+        caseCount: setForm.value.caseIds.length
       }
       ElMessage.success('用例集已更新')
     }
@@ -739,6 +741,7 @@ const saveSet = () => {
       name: setForm.value.name,
       description: setForm.value.description,
       caseIds: [...setForm.value.caseIds],
+      caseCount: setForm.value.caseIds.length,
       createdAt: new Date().toISOString()
     })
     ElMessage.success('用例集已创建')
@@ -757,6 +760,12 @@ const deleteSet = async (id: number) => {
     ElMessage.success('用例集已删除')
   } catch { /* canceled */ }
 }
+
+onMounted(() => {
+  appStore.fetchTestCases()
+  appStore.fetchCaseSets()
+  handleSearch()
+})
 </script>
 
 <style scoped>

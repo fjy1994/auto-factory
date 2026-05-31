@@ -138,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import {
@@ -161,7 +161,7 @@ const statusSummary = computed(() => {
     busy: devices.value.filter(d => d.status === 'busy').length,
     flashing: devices.value.filter(d => d.status === 'flashing').length,
     offline: devices.value.filter(d => d.status === 'offline').length,
-    error: devices.value.filter(d => d.status === 'error').length
+    error: 0 // 设备类型无 'error' 状态
   }
   return [
     { key: 'idle', label: '空闲', count: counts.idle, color: '#67c23a' },
@@ -181,8 +181,8 @@ const devicePercent = (status: string) => {
 // 任务统计
 const pendingTasks = computed(() => tasks.value.filter(t => t.status === 'queued').length)
 const runningTasks = computed(() => tasks.value.filter(t => t.status === 'running').length)
-const successTasks = computed(() => tasks.value.filter(t => t.status === 'success').length)
-const failedTasks = computed(() => tasks.value.filter(t => t.status === 'failed').length)
+const successTasks = computed(() => tasks.value.filter(t => t.status === 'completed').length)
+const failedTasks = computed(() => tasks.value.filter(t => t.status === 'completed' && (t.failCount ?? 0) > 0).length)
 
 // 分支摘要
 const branchSummary = computed(() => appStore.branches)
@@ -198,6 +198,12 @@ const quickActions = [
 const goToDevice = () => router.push('/device')
 const goToTask = () => router.push('/task')
 const goToBranch = () => router.push('/branch')
+
+onMounted(() => {
+  appStore.fetchDevices()
+  appStore.fetchTasks()
+  appStore.fetchBranches()
+})
 </script>
 
 <style scoped>

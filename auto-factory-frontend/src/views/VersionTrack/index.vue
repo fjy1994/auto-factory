@@ -18,18 +18,18 @@
         </el-select>
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索版本号/型号/分支..."
+          placeholder="搜索版本号/分支..."
           clearable
           size="small"
-          style="width: 220px"
-          :prefix-icon="Search"
+          style="width: 180px"
         />
+        <el-button size="small" :icon="Search" @click="handleSearch">查询</el-button>
       </div>
     </div>
 
     <!-- 三格统计卡片 -->
     <div class="stats-row">
-      <div class="stat-card covered" @click="coverageFilter = (coverageFilter === 'covered' ? '' : 'covered')">
+      <div class="stat-card covered" @click="setCoverageFilter('covered')">
         <div class="stat-card-icon">
           <el-icon :size="26"><CircleCheckFilled /></el-icon>
         </div>
@@ -42,7 +42,7 @@
         </div>
       </div>
 
-      <div class="stat-card covering" @click="coverageFilter = (coverageFilter === 'covering' ? '' : 'covering')">
+      <div class="stat-card covering" @click="setCoverageFilter('covering')">
         <div class="stat-card-icon">
           <el-icon :size="26"><Refresh /></el-icon>
         </div>
@@ -55,7 +55,7 @@
         </div>
       </div>
 
-      <div class="stat-card uncovered" @click="coverageFilter = (coverageFilter === 'uncovered' ? '' : 'uncovered')">
+      <div class="stat-card uncovered" @click="setCoverageFilter('uncovered')">
         <div class="stat-card-icon">
           <el-icon :size="26"><WarnTriangleFilled /></el-icon>
         </div>
@@ -80,36 +80,33 @@
             <!-- 左侧主信息 -->
             <div class="card-main">
               <div class="version-row">
-                <span class="version-tag" :class="rec.coverageClass">{{ rec.romVersion }}</span>
+                <span class="version-tag" :class="rec.coverageClass">{{ rec.version }}</span>
                 <el-tag
                   :type="rec.coverageTagType"
                   size="small"
                   effect="dark"
                   round
                 >{{ rec.coverageLabel }}</el-tag>
-                <span class="rec-time">{{ formatTime(rec.emailReceivedAt) }}</span>
+                <el-tag :type="branchTagType(rec.branchType)" size="small" effect="light" round>{{ rec.branchType }}</el-tag>
+                <span class="rec-time">{{ formatTime(appStore.versions.find(v => v.id === rec.id)?.createdAt || '') }}</span>
               </div>
               <div class="meta-row">
                 <span class="meta-chip">
                   <el-icon :size="11"><Folder /></el-icon>
-                  <el-tag :type="branchTagType(rec.branchType)" size="small" effect="light" round>{{ rec.branchType }}</el-tag>
                   {{ rec.branchName }}
                 </span>
                 <span class="meta-chip">
-                  <el-icon :size="11"><Monitor /></el-icon>
-                  {{ rec.model }}
-                </span>
-                <span v-if="rec.deviceSerial" class="meta-chip">
-                  <code>{{ rec.deviceSerial }}</code>
+                  <el-icon :size="11"><Collection /></el-icon>
+                  {{ VERSION_STATUS_TEXT[rec.status] || '未知' }}
                 </span>
                 <span
-                  v-if="rec.flashingProcessId"
+                  v-if="rec.flashingTaskIds && rec.flashingTaskIds.length > 0"
                   class="meta-chip flashing-link"
-                  :class="{ 'flash-failed-link': rec.status === 'failed' }"
-                  @click="$router.push('/flash?focus=' + rec.flashingProcessId)"
+                  :class="{ 'flash-failed-link': rec.status === 3 }"
+                  @click="$router.push('/flash?version=' + rec.version)"
                 >
                   <el-icon :size="11"><Opportunity /></el-icon>
-                  刷机 #{{ rec.flashingProcessId }}
+                  刷机管理
                 </span>
               </div>
             </div>
@@ -119,19 +116,15 @@
               <!-- 已覆盖：显示通过/失败统计 -->
               <template v-if="rec.coverageStatus === 'covered'">
                 <div class="result-pass">
-                  <div class="result-big-num">{{ rec.taskSummary.passCount }}</div>
+                  <div class="result-big-num">{{ rec.passCount }}</div>
                   <div class="result-big-label">通过</div>
                 </div>
-                <div v-if="rec.taskSummary.failCount" class="result-fail">
-                  <div class="result-big-num">{{ rec.taskSummary.failCount }}</div>
+                <div v-if="rec.failCount" class="result-fail">
+                  <div class="result-big-num">{{ rec.failCount }}</div>
                   <div class="result-big-label">失败</div>
                 </div>
-                <div v-if="rec.taskSummary.errorCount" class="result-err">
-                  <div class="result-big-num">{{ rec.taskSummary.errorCount }}</div>
-                  <div class="result-big-label">错误</div>
-                </div>
-                <div class="result-rate" :class="{ warn: rec.taskSummary.overallPassRate < 90 }">
-                  {{ rec.taskSummary.overallPassRate }}%
+                <div class="result-rate" :class="{ warn: rec.passRate !== undefined && rec.passRate < 90 }">
+                  {{ rec.passRate }}%
                 </div>
               </template>
 
@@ -156,32 +149,31 @@
           <!-- 展开区域：详细任务结果 | 原因说明 -->
           <div class="detail-area">
             <!-- 已覆盖/覆盖中：展开任务明细 -->
-            <template v-if="rec.taskResults && rec.taskResults.length">
+            <template v-if="rec.tasks && rec.tasks.length">
               <div class="detail-header" @click="toggleDetail(rec.id)">
                 <el-icon :size="13" color="#909399"><List /></el-icon>
-                <span>{{ rec.taskResults.length }} 项任务</span>
+                <span>{{ rec.tasks.length }} 项任务</span>
                 <el-icon class="detail-arrow" :class="{ expanded: expandedDetails.has(rec.id) }"><ArrowDown /></el-icon>
               </div>
               <Transition name="expand">
                 <div v-if="expandedDetails.has(rec.id)" class="task-detail-list">
-                  <div v-for="tr in rec.taskResults" :key="tr.taskConfigId" class="task-detail-row" :class="tr.status" @click.stop="$router.push('/task?focus=' + tr.taskConfigId)">
+                  <div v-for="tr in rec.tasks" :key="tr.id" class="task-detail-row" :class="tr.status" @click.stop="$router.push('/task?focus=' + tr.id)">
                     <div class="td-left">
                       <el-icon :size="12">
-                        <CircleCheck v-if="tr.status === 'success'" />
-                        <CircleClose v-else-if="tr.status === 'failed' || tr.status === 'error'" />
+                        <CircleCheck v-if="tr.status === 'completed' && !tr.failCount" />
+                        <CircleClose v-else-if="tr.status === 'completed' && tr.failCount" />
                         <Refresh v-else-if="tr.status === 'running'" />
                         <Clock v-else />
                       </el-icon>
                       <span class="td-name">{{ tr.name }}</span>
                     </div>
                     <div class="td-stats">
-                      <span v-if="tr.passRate !== undefined" class="td-rate" :class="{ warn: tr.passRate < 90 }">
+                      <span v-if="tr.passRate !== undefined" class="td-rate" :class="{ warn: tr.passRate !== undefined && tr.passRate < 90 }">
                         {{ tr.passRate }}%
                       </span>
-                      <span class="td-count" :title="'通过 ' + tr.passCount + ' / 失败 ' + tr.failCount + ' / 总 ' + tr.totalCount">
-                        {{ tr.passCount }}/{{ tr.failCount }}/{{ tr.totalCount }}
+                      <span class="td-count" :title="'通过 ' + (tr.passCount ?? 0) + ' / 失败 ' + (tr.failCount ?? 0) + ' / 总 ' + (tr.totalCount ?? 0)">
+                        {{ tr.passCount ?? 0 }}/{{ tr.failCount ?? 0 }}/{{ tr.totalCount ?? 0 }}
                       </span>
-                      <span v-if="tr.duration" class="td-duration">{{ formatDuration(tr.duration) }}</span>
                     </div>
                     <div class="td-bar-bg">
                       <div
@@ -196,21 +188,39 @@
             </template>
 
             <!-- 刷机失败：显示失败原因 -->
-            <div v-else-if="rec.status === 'failed'" class="detail-reason">
+            <div v-else-if="rec.status === 3" class="detail-reason">
               <el-icon :size="13" color="#f56c6c"><WarnTriangleFilled /></el-icon>
-              <span>{{ rec.reason || '刷机过程中发生错误，设备未准备好' }}</span>
+              <span>{{ VERSION_STATUS_TEXT[3] }}</span>
             </div>
 
-            <!-- 阻塞原因 -->
-            <div v-else-if="rec.reason" class="detail-reason">
-              <el-icon :size="13" color="#909399"><InfoFilled /></el-icon>
-              <span>{{ rec.reason }}</span>
+            <!-- 无设备 -->
+            <div v-else-if="rec.status === 0" class="detail-reason">
+              <el-icon :size="13" color="#909399"><Clock /></el-icon>
+              <span>{{ VERSION_STATUS_TEXT[0] }}</span>
+              <el-button size="small" type="primary" plain :loading="versionDispatchLoading === rec.id" @click.stop="dispatchFlash(rec)">
+                重新下发
+              </el-button>
             </div>
 
-            <!-- 刷机成功等任务 -->
-            <div v-else-if="rec.status === 'success' && !rec.taskResults" class="detail-reason pending">
+            <!-- 等待中 -->
+            <div v-else-if="rec.status === 1 && (!rec.tasks || rec.tasks.length === 0)" class="detail-reason pending">
               <el-icon :size="13" color="#e6a23c"><Clock /></el-icon>
-              <span>刷机完成，等待执行分支任务...</span>
+              <span>等待刷机后执行任务...</span>
+              <el-button size="small" type="primary" plain :loading="versionDispatchLoading === rec.id" @click.stop="dispatchFlash(rec)">
+                下发刷机
+              </el-button>
+            </div>
+
+            <!-- 已完成无任务 -->
+            <div v-else-if="rec.status === 5 && (!rec.tasks || rec.tasks.length === 0)" class="detail-reason">
+              <el-icon :size="13" color="#909399"><InfoFilled /></el-icon>
+              <span>该版本已完成测试</span>
+            </div>
+
+            <!-- 已废弃 -->
+            <div v-else-if="rec.status === 6" class="detail-reason">
+              <el-icon :size="13" color="#909399"><InfoFilled /></el-icon>
+              <span>{{ VERSION_STATUS_TEXT[6] }}</span>
             </div>
           </div>
         </div>
@@ -237,36 +247,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
+import { VERSION_STATUS_TEXT } from '@/stores/app'
+import { ElMessage } from 'element-plus'
 import {
   Search, CircleCheck, CircleClose, Clock, Refresh, ArrowDown,
-  Monitor, Collection, Folder, CircleCheckFilled, List, Opportunity
+  Collection, Folder, CircleCheckFilled, List, Opportunity
 } from '@element-plus/icons-vue'
-import { WarnTriangleFilled, InfoFilled } from '@element-plus/icons-vue'
-import type { RomRecord, RomTaskResult } from '@/types'
+import { WarnTriangleFilled } from '@element-plus/icons-vue'
+import type { Version, VersionTask } from '@/types'
+import { dispatchFlashing } from '@/api'
 
 interface RecordVM {
   id: number
-  romVersion: string
-  model: string
+  version: string
   branchId: number
   branchName: string
   branchType: string
-  deviceSerial?: string
-  emailTitle: string
-  emailReceivedAt: string
-  status: RomRecord['status']
-  reason?: string
-  taskResults: RomTaskResult[]
-  tasksStatus: RomRecord['tasksStatus']
-  flashingProcessId?: number
+  status: number
+  flashingTaskIds?: number[]
+  tasks?: VersionTask[]
   // computed
   coverageStatus: 'covered' | 'covering' | 'uncovered'
   coverageLabel: string
   coverageTagType: 'success' | 'warning' | 'danger' | 'info'
   coverageClass: string
-  taskSummary: { passCount: number; failCount: number; errorCount: number; totalCount: number; overallPassRate: number }
+  passCount: number
+  failCount: number
+  totalCount: number
+  passRate: number
 }
 
 const appStore = useAppStore()
@@ -280,89 +290,122 @@ const toggleDetail = (id: number) => {
   expandedDetails.value = s
 }
 
-// 计算覆盖率状态
-function computeCoverage(rec: RomRecord): {
+// 根据 Version status 计算覆盖率状态
+function computeCoverage(v: Version): {
   coverageStatus: 'covered' | 'covering' | 'uncovered'
   coverageLabel: string
   coverageTagType: 'success' | 'warning' | 'danger' | 'info'
   coverageClass: string
-  taskSummary: { passCount: number; failCount: number; errorCount: number; totalCount: number; overallPassRate: number }
 } {
-  const tr = rec.taskResults || []
-  const ts = rec.tasksStatus
+  const s = v.status
 
-  // 汇总任务结果
-  const passCount = tr.filter(t => t.status === 'success').reduce((s, t) => s + (t.passCount ?? 0), 0)
-  const failCount = tr.filter(t => t.status === 'failed' || t.status === 'error').reduce((s, t) => s + (t.failCount ?? 0) + (t.errorCount ?? 0), 0)
-  const errorCount = tr.filter(t => t.status === 'error').reduce((s, t) => s + (t.errorCount ?? 0), 0)
-  const totalCount = tr.reduce((s, t) => s + (t.totalCount ?? 0), 0)
-  const totalPass = tr.reduce((s, t) => s + (t.passCount ?? 0), 0)
-  const overallPassRate = totalCount > 0 ? Math.round((totalPass / totalCount) * 100) : 0
-
-  // 已覆盖：任务全部执行完成
-  if (ts === 'completed' || (rec.status === 'success' && tr.length > 0 && tr.every(t => t.status === 'success' || t.status === 'failed' || t.status === 'error'))) {
-    const anyFailed = tr.some(t => t.status === 'failed' || t.status === 'error')
+  // 已完成 (COMPLETED)
+  if (s === 5) {
+    const anyFailed = (v.failCount ?? 0) > 0
     return {
       coverageStatus: 'covered',
       coverageLabel: anyFailed ? '测试未通过' : '测试通过',
       coverageTagType: anyFailed ? 'danger' : 'success',
       coverageClass: anyFailed ? 'covered-fail' : 'covered-pass',
-      taskSummary: { passCount, failCount, errorCount, totalCount, overallPassRate }
     }
   }
 
-  // 覆盖中：已刷成功，任务执行中或待执行
-  if (rec.status === 'success' || rec.status === 'flashing') {
-    const isTaskRunning = ts === 'running' || tr.some(t => t.status === 'running')
+  // 测试中 (TESTING)
+  if (s === 4) {
     return {
       coverageStatus: 'covering',
-      coverageLabel: isTaskRunning ? '任务执行中' : (rec.status === 'flashing' ? '刷机中' : '等待执行任务'),
+      coverageLabel: '任务执行中',
       coverageTagType: 'warning',
-      coverageClass: isTaskRunning ? 'tasking' : 'flashing',
-      taskSummary: { passCount, failCount, errorCount, totalCount, overallPassRate }
+      coverageClass: 'tasking',
     }
   }
 
-  // 未覆盖
-  const labelMap: Record<string, string> = {
-    no_match: '未匹配分支',
-    no_device: '无对应设备',
-    waiting: '排队等待设备',
-    failed: '刷机失败',
-    matched: '待分配设备',
+  // 刷机中 (FLASHING)
+  if (s === 2) {
+    return {
+      coverageStatus: 'covering',
+      coverageLabel: '刷机中',
+      coverageTagType: 'warning',
+      coverageClass: 'flashing',
+    }
   }
+
+  // 等待中 (QUEUED)
+  if (s === 1) {
+    return {
+      coverageStatus: 'covering',
+      coverageLabel: '等待执行',
+      coverageTagType: 'warning',
+      coverageClass: 'flashing',
+    }
+  }
+
+  // 刷机失败 (FLASH_FAILED)
+  if (s === 3) {
+    return {
+      coverageStatus: 'uncovered',
+      coverageLabel: '刷机失败',
+      coverageTagType: 'danger',
+      coverageClass: 'flash-failed',
+    }
+  }
+
+  // 无设备 (NO_DEVICE)
+  if (s === 0) {
+    return {
+      coverageStatus: 'uncovered',
+      coverageLabel: '无对应设备',
+      coverageTagType: 'info',
+      coverageClass: 'blocked',
+    }
+  }
+
+  // 已废弃 (OBSOLETED)
+  if (s === 6) {
+    return {
+      coverageStatus: 'uncovered',
+      coverageLabel: '已废弃',
+      coverageTagType: 'info',
+      coverageClass: 'blocked',
+    }
+  }
+
   return {
     coverageStatus: 'uncovered',
-    coverageLabel: labelMap[rec.status] || rec.status,
+    coverageLabel: '未知',
     coverageTagType: 'info',
-    coverageClass: rec.status === 'failed' ? 'flash-failed' : 'blocked',
-    taskSummary: { passCount, failCount, errorCount, totalCount, overallPassRate }
+    coverageClass: 'blocked',
   }
 }
 
-const romRecords = computed(() => appStore.romRecords)
+function extractBranchType(branchName: string): string {
+  if (branchName.startsWith('DEV')) return 'DEV'
+  if (branchName.includes('主干')) return '主干'
+  if (branchName.startsWith('商分') || branchName.includes('商分')) return '商分'
+  return '其他'
+}
+
+const versions = computed(() => appStore.versions)
 
 const allRecords = computed<RecordVM[]>(() => {
-  return romRecords.value.map(r => {
-    const coverage = computeCoverage(r)
+  return versions.value.map(v => {
+    const coverage = computeCoverage(v)
     return {
-      id: r.id,
-      romVersion: r.romVersion,
-      model: r.model,
-      branchId: r.branchId,
-      branchName: r.branchName,
-      branchType: r.branchType,
-      deviceSerial: r.deviceSerial,
-      emailTitle: r.emailTitle,
-      emailReceivedAt: r.emailReceivedAt,
-      status: r.status,
-      reason: r.reason,
-      taskResults: r.taskResults || [],
-      tasksStatus: r.tasksStatus,
-      flashingProcessId: r.flashingProcessId,
+      id: v.id,
+      version: v.version,
+      branchId: v.branchId,
+      branchName: v.branchName,
+      branchType: extractBranchType(v.branchName),
+      status: v.status,
+      flashingTaskIds: v.flashingTaskIds,
+      tasks: v.tasks,
+      passCount: v.passCount ?? 0,
+      failCount: v.failCount ?? 0,
+      totalCount: v.totalCount ?? 0,
+      passRate: v.passRate ?? 0,
       ...coverage,
     }
-  }).sort((a, b) => new Date(b.emailReceivedAt).getTime() - new Date(a.emailReceivedAt).getTime())
+  }).sort((a, b) => new Date(appStore.versions.find(v => v.id === b.id)?.createdAt || 0).getTime() - new Date(appStore.versions.find(v => v.id === a.id)?.createdAt || 0).getTime())
 })
 
 const totalCount = computed(() => allRecords.value.length)
@@ -377,27 +420,11 @@ const coveredFailCount = computed(() => allRecords.value.filter(r => r.coverageS
 const flashingCount = computed(() => allRecords.value.filter(r => r.coverageClass === 'flashing').length)
 const taskingCount = computed(() => allRecords.value.filter(r => r.coverageClass === 'tasking').length)
 
-const noMatchCount = computed(() => allRecords.value.filter(r => r.status === 'no_match').length)
-const noDeviceCount = computed(() => allRecords.value.filter(r => r.status === 'no_device').length)
-const failedCount = computed(() => allRecords.value.filter(r => r.status === 'failed').length)
+const noDeviceCount = computed(() => allRecords.value.filter(r => r.status === 0).length)
+const failedCount = computed(() => allRecords.value.filter(r => r.status === 3).length)
+const noMatchCount = computed(() => 0) // 新版本没有"未匹配"状态
 
-const filteredRecords = computed(() => {
-  let list = allRecords.value
-  if (coverageFilter.value) {
-    list = list.filter(r => r.coverageStatus === coverageFilter.value)
-  }
-  if (searchKeyword.value) {
-    const kw = searchKeyword.value.toLowerCase()
-    list = list.filter(r =>
-      r.romVersion.toLowerCase().includes(kw) ||
-      r.model.toLowerCase().includes(kw) ||
-      r.branchName.toLowerCase().includes(kw) ||
-      r.deviceSerial?.toLowerCase().includes(kw) ||
-      r.emailTitle.toLowerCase().includes(kw)
-    )
-  }
-  return list
-})
+const filteredRecords = ref<RecordVM[]>([])
 
 const currentPage = ref(1)
 const pageSize = 10
@@ -406,7 +433,31 @@ const pagedRecords = computed(() => {
   return filteredRecords.value.slice(start, start + pageSize)
 })
 
-watch([coverageFilter, searchKeyword], () => { currentPage.value = 1 })
+const handleSearch = () => {
+  currentPage.value = 1
+  let list = allRecords.value
+  if (coverageFilter.value) {
+    list = list.filter(r => r.coverageStatus === coverageFilter.value)
+  }
+  if (searchKeyword.value) {
+    const kw = searchKeyword.value.toLowerCase()
+    list = list.filter(r =>
+      r.version.toLowerCase().includes(kw) ||
+      r.branchName.toLowerCase().includes(kw)
+    )
+  }
+  filteredRecords.value = list
+}
+
+const setCoverageFilter = (value: string) => {
+  coverageFilter.value = coverageFilter.value === value ? '' : value
+  handleSearch()
+}
+
+onMounted(() => {
+  appStore.fetchVersions()
+  handleSearch()
+})
 
 const branchTagType = (t: string) => {
   const map: Record<string, string> = { DEV: 'primary', 主干: 'success', 商分: 'warning' }
@@ -423,13 +474,27 @@ const formatTime = (t: string) => {
   return `${mm}-${dd} ${hh}:${mi}`
 }
 
-const formatDuration = (sec?: number) => {
-  if (!sec) return '-'
-  if (sec < 60) return `${sec}s`
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return s ? `${m}m${s}s` : `${m}m`
+// 下发刷机
+const versionDispatchLoading = ref<number | null>(null)
+const dispatchFlash = async (rec: RecordVM) => {
+  versionDispatchLoading.value = rec.id
+  try {
+    const result = await dispatchFlashing(rec.id)
+    if (result.code === 0) {
+      ElMessage.success(`已下发刷机任务到 ${result.data?.process_count || 0} 台设备`)
+      // 刷新版本数据
+      await appStore.fetchVersions()
+    } else {
+      ElMessage.error(result.message || '下发刷机失败')
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || e?.message || '下发刷机失败')
+  } finally {
+    versionDispatchLoading.value = null
+  }
 }
+
+// formatDuration 已移除（新类型中不需要）
 </script>
 
 <style scoped>

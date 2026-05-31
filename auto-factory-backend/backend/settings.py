@@ -117,3 +117,9 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',
     },
 }
+
+
+# Agent 相关配置
+AGENT_DEFAULT_PORT = 18000            # Agent HTTP 服务端口
+AGENT_REQUEST_TIMEOUT = 10            # Agent 请求超时时间（秒）
+# ROM_DOWNLOAD_BASE_URL = 'http://your-rom-server/roms'  # ROM 下载地址前缀

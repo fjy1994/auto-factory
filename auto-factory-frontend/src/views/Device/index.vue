@@ -7,7 +7,7 @@
         :key="stat.key"
         class="stat-card"
         :style="{ '--gradient': stat.gradient }"
-        @click="statusFilter = stat.key === 'total' ? '' : stat.key"
+        @click="setStatFilter(stat.key)"
       >
         <div class="stat-icon-wrapper" :style="{ background: stat.iconBg }">
           <el-icon :size="24"><component :is="stat.icon" /></el-icon>
@@ -32,33 +32,34 @@
         <el-tag size="small" type="info" round>{{ filteredDevices.length }} / {{ totalCount }}</el-tag>
       </div>
       <div class="toolbar-right">
-        <div class="last-update" v-if="lastUpdateTime">
-          <el-icon><Clock /></el-icon>
-          <span>上次更新: {{ lastUpdateTime }}</span>
-        </div>
         <el-select
           v-model="statusFilter"
           placeholder="状态筛选"
           clearable
           size="small"
-          style="width: 130px"
-          @change="handleFilterChange"
+          style="width: 120px"
         >
           <el-option label="全部状态" value="" />
           <el-option label="空闲" value="idle" />
           <el-option label="忙碌" value="busy" />
           <el-option label="刷机中" value="flashing" />
           <el-option label="离线" value="offline" />
-          <el-option label="异常" value="error" />
         </el-select>
         <el-input
-          v-model="searchKeyword"
-          placeholder="搜索机型 / 序列号 / IP"
+          v-model="modelFilter"
+          placeholder="机型"
           clearable
           size="small"
-          style="width: 220px"
-          :prefix-icon="Search"
+          style="width: 140px"
         />
+        <el-input
+          v-model="executorIpFilter"
+          placeholder="执行机 IP"
+          clearable
+          size="small"
+          style="width: 150px"
+        />
+        <el-button type="primary" size="small" :icon="Search" @click="handleSearch">查询</el-button>
         <el-button size="small" :icon="Refresh" circle @click="refreshData" />
       </div>
     </div>
@@ -80,7 +81,7 @@
               </div>
               <div class="device-info">
                 <div class="device-name">
-                  <span class="name-text">{{ row.deviceName || row.serial }}</span>
+                  <span class="name-text">{{ row.serial }}</span>
                   <el-tag
                     :type="getStatusType(row.status)"
                     size="small"
@@ -92,8 +93,6 @@
                 </div>
                 <div class="device-meta">
                   <span class="meta-item">{{ row.model || '-' }}</span>
-                  <span class="meta-divider">·</span>
-                  <span class="meta-item">{{ row.serial }}</span>
                   <span class="meta-divider">·</span>
                   <span class="meta-item">{{ row.executorIp }}</span>
                 </div>
@@ -163,7 +162,7 @@
       </el-table>
 
       <!-- 分页 -->
-      <div v-if="filteredDevices.length > 10" class="pagination-wrapper">
+      <div v-if="filteredDevices.length > pageSize" class="pagination-wrapper">
         <el-pagination
           v-model:current-page="currentPage"
           :page-size="pageSize"
@@ -179,7 +178,7 @@
     <!-- 设备详情弹窗 -->
     <el-dialog
       v-model="detailVisible"
-      :title="selectedDevice?.deviceName || selectedDevice?.serial || '设备详情'"
+      :title="selectedDevice?.model || selectedDevice?.serial || '设备详情'"
       width="640px"
       class="detail-dialog"
       destroy-on-close
@@ -192,7 +191,7 @@
               <el-icon :size="40"><Monitor /></el-icon>
             </div>
             <div class="banner-status">
-              <div class="banner-device-name">{{ selectedDevice.deviceName }}</div>
+              <div class="banner-device-name">{{ selectedDevice.model }}</div>
               <div class="banner-status-tag">
                 <el-tag :type="getStatusType(selectedDevice.status)" size="small" effect="dark">
                   <span class="status-dot" :class="selectedDevice.status"></span>
@@ -255,15 +254,6 @@
           </div>
         </div>
       </div>
-
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="detailVisible = false">关闭</el-button>
-          <el-button type="warning" :icon="RefreshRight" @click="handleReboot(selectedDevice!)">
-            重启设备
-          </el-button>
-        </div>
-      </template>
     </el-dialog>
 
     <!-- 编辑设备弹窗 -->
@@ -291,7 +281,6 @@
               <el-option label="忙碌" value="busy" />
               <el-option label="刷机中" value="flashing" />
               <el-option label="离线" value="offline" />
-              <el-option label="异常" value="error" />
             </el-select>
           </el-form-item>
           <el-form-item label="备注信息">
@@ -315,12 +304,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
 import {
   Search, Refresh, Monitor, Cpu, Connection, Clock,
-  Edit, RefreshRight, CircleCheck, Warning,
+  Edit, RefreshRight, CircleCheck,
   VideoPause, DataLine
 } from '@element-plus/icons-vue'
 import type { Device } from '@/types'
@@ -328,9 +317,11 @@ import type { Device } from '@/types'
 const appStore = useAppStore()
 
 const statusFilter = ref('')
-const searchKeyword = ref('')
+const serialFilter = ref('')
+const modelFilter = ref('')
+const executorIpFilter = ref('')
 const currentPage = ref(1)
-const pageSize = 20
+const pageSize = 10
 const detailVisible = ref(false)
 const selectedDevice = ref<Device | null>(null)
 const editVisible = ref(false)
@@ -338,33 +329,15 @@ const editingDeviceId = ref<number | null>(null)
 const editingDeviceSerial = ref('')
 const editingStatus = ref('')
 const editingRemark = ref('')
-const lastUpdateTime = ref('')
 
 const devices = computed(() => appStore.devices)
 
-const filteredDevices = computed(() => {
-  let result = devices.value
-  if (statusFilter.value) {
-    result = result.filter(d => d.status === statusFilter.value)
-  }
-  if (searchKeyword.value) {
-    const kw = searchKeyword.value.toLowerCase()
-    result = result.filter(d =>
-      (d.deviceName || '').toLowerCase().includes(kw) ||
-      d.serial.toLowerCase().includes(kw) ||
-      d.executorIp.toLowerCase().includes(kw) ||
-      (d.model || '').toLowerCase().includes(kw)
-    )
-  }
-  return result
-})
+const filteredDevices = ref<Device[]>([])
 
 const pagedDevices = computed(() => {
   const start = (currentPage.value - 1) * pageSize
   return filteredDevices.value.slice(start, start + pageSize)
 })
-
-watch([statusFilter, searchKeyword], () => { currentPage.value = 1 })
 
 // 统计卡片数据
 const totalCount = computed(() => devices.value.length)
@@ -372,7 +345,11 @@ const idleCount = computed(() => devices.value.filter(d => d.status === 'idle').
 const busyCount = computed(() => devices.value.filter(d => d.status === 'busy').length)
 const flashingCount = computed(() => devices.value.filter(d => d.status === 'flashing').length)
 const offlineCount = computed(() => devices.value.filter(d => d.status === 'offline').length)
-const errorCount = computed(() => devices.value.filter(d => d.status === 'error').length)
+
+const setStatFilter = (key: string) => {
+  statusFilter.value = statusFilter.value === key || key === 'total' ? '' : key
+  handleSearch()
+}
 
 const statCards = computed(() => [
   {
@@ -419,15 +396,6 @@ const statCards = computed(() => [
     gradient: 'linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%)',
     iconBg: 'rgba(255,255,255,0.2)',
     trend: null
-  },
-  {
-    key: 'error',
-    label: '异常',
-    value: errorCount.value,
-    icon: Warning,
-    gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    iconBg: 'rgba(255,255,255,0.2)',
-    trend: null
   }
 ])
 
@@ -455,7 +423,7 @@ const getStatusText = (status: string) => {
 }
 
 // 时间格式化
-const formatRelativeTime = (time: string) => {
+const formatRelativeTime = (time?: string) => {
   if (!time) return '-'
   const now = Date.now()
   const t = new Date(time).getTime()
@@ -468,7 +436,7 @@ const formatRelativeTime = (time: string) => {
   return new Date(time).toLocaleDateString('zh-CN')
 }
 
-const formatFullTime = (time: string) => {
+const formatFullTime = (time?: string) => {
   if (!time) return '-'
   return new Date(time).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -489,18 +457,39 @@ const getTimeFreshness = (time: string) => {
 }
 
 // 操作
-const handleFilterChange = () => {
-  // no additional logic needed
+const handleSearch = () => {
+  currentPage.value = 1
+  const params: { status?: string; model?: string; executor_ip?: string } = {}
+  if (statusFilter.value) params.status = statusFilter.value
+  if (modelFilter.value) params.model = modelFilter.value
+  if (executorIpFilter.value) params.executor_ip = executorIpFilter.value
+  appStore.fetchDevices(Object.keys(params).length ? params : undefined).then(() => {
+    applyFilters()
+  })
+}
+
+const applyFilters = () => {
+  let result = devices.value
+  if (statusFilter.value) {
+    result = result.filter(d => d.status === statusFilter.value)
+  }
+  if (serialFilter.value) {
+    const kw = serialFilter.value.toLowerCase()
+    result = result.filter(d => d.serial.toLowerCase().includes(kw))
+  }
+  if (modelFilter.value) {
+    const kw = modelFilter.value.toLowerCase()
+    result = result.filter(d => (d.model || '').toLowerCase().includes(kw))
+  }
+  if (executorIpFilter.value) {
+    const kw = executorIpFilter.value.toLowerCase()
+    result = result.filter(d => (d.executorIp || '').toLowerCase().includes(kw))
+  }
+  filteredDevices.value = result
 }
 
 const refreshData = () => {
-  const now = new Date()
-  lastUpdateTime.value = now.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-  ElMessage.success('数据已刷新')
+  handleSearch()
 }
 
 const showDetail = (device: Device) => {
@@ -509,7 +498,7 @@ const showDetail = (device: Device) => {
 }
 
 const handleReboot = (device: Device) => {
-  ElMessage.success(`重启指令已下发至 ${device.deviceName || device.serial}`)
+  ElMessage.success(`重启指令已下发至 ${device.model || device.serial}`)
   detailVisible.value = false
 }
 
@@ -534,10 +523,9 @@ const saveEdit = () => {
 }
 
 onMounted(() => {
-  if (!appStore.devices.length) {
-    appStore.fetchAll()
-  }
-  refreshData()
+  appStore.fetchDevices().then(() => {
+    filteredDevices.value = devices.value
+  })
 })
 </script>
 
@@ -559,7 +547,7 @@ onMounted(() => {
 /* ==================== 统计卡片 ==================== */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
 }
 

@@ -145,9 +145,12 @@
                   <div class="task-config-info">
                     <div class="task-config-name">{{ task.name }}</div>
                             <div class="task-config-meta">
-                      <span>用例集: {{ task.caseSets.length > 0 ? task.caseSets.join(', ') : '无' }}</span>
+                      <span>用例集: {{ task.caseSetIds?.length || 0 }}</span>
                       <span class="meta-divider">·</span>
                       <span>每批 {{ task.batchSize || 10 }} 个</span>
+                      <span class="meta-divider">·</span>
+                      <span v-if="task.deviceSelectType === 'manual'">指定设备: {{ task.deviceIds.length }} 台</span>
+                      <span v-else>设备: {{ task.deviceQuantity || '全' }} 台{{ task.deviceModels?.length ? ` (${task.deviceModels.join(', ')})` : '' }}</span>
                       <span v-if="task.scriptPath" class="meta-divider">·</span>
                       <span v-if="task.scriptPath">脚本: {{ task.scriptPath }}</span>
                     </div>
@@ -212,15 +215,15 @@
       </template>
     </el-dialog>
 
-    <!-- 任务配置弹窗 -->
+        <!-- 任务配置弹窗 -->
     <el-dialog
       v-model="taskDialogVisible"
       title="配置任务"
-      width="500px"
+      width="550px"
       class="branch-dialog"
       destroy-on-close
     >
-      <el-form :model="taskForm" label-width="100px" size="small">
+      <el-form :model="taskForm" label-width="120px" size="small">
         <el-form-item label="任务名称" required>
           <el-input v-model="taskForm.name" placeholder="例如: 基础功能测试" />
         </el-form-item>
@@ -231,18 +234,58 @@
           <el-input-number v-model="taskForm.batchSize" :min="1" :max="100" size="small" />
           <span style="margin-left: 8px; font-size: 12px; color: #909399;">个用例</span>
         </el-form-item>
-        <el-form-item label="关联用例集">
-          <el-select v-model="taskForm.caseSets" multiple placeholder="选择关联的用例集" style="width: 100%">
-            <el-option
-              v-for="tc in testCases"
-              :key="tc.id"
-              :label="`${tc.caseId} - ${tc.name}`"
-              :value="tc.id"
-            />
-          </el-select>
+        <el-form-item label="设备选择方式">
+          <el-radio-group v-model="deviceSelectMode">
+            <el-radio value="auto">动态分配（按型号）</el-radio>
+            <el-radio value="manual">指定设备</el-radio>
+          </el-radio-group>
         </el-form-item>
-        <el-form-item label="执行顺序">
-          <el-input-number v-model="taskForm.order" :min="1" :max="20" size="small" />
+        <template v-if="deviceSelectMode === 'auto'">
+          <el-form-item label="所需设备数量">
+            <el-input-number v-model="taskForm.deviceQuantity" :min="0" :max="50" size="small" />
+            <span style="margin-left: 8px; font-size: 12px; color: #909399;">台（0=不限制）</span>
+          </el-form-item>
+          <el-form-item label="限制设备型号">
+            <el-select v-model="taskForm.deviceModels" multiple placeholder="不选=全型号" style="width: 100%" clearable>
+              <el-option
+                v-for="m in availableModels"
+                :key="m"
+                :label="m"
+                :value="m"
+              />
+            </el-select>
+          </el-form-item>
+        </template>
+        <template v-else>
+          <el-form-item label="选择设备">
+            <el-select v-model="taskForm.deviceIds" multiple placeholder="搜索设备序列号或型号..." style="width: 100%" filterable clearable>
+              <el-option
+                v-for="d in appStore.devices"
+                :key="d.id"
+                :label="`${d.serial}${d.model ? ' (' + d.model + ')' : ''}`"
+                :value="d.id"
+              />
+            </el-select>
+          </el-form-item>
+        </template>
+        <el-form-item label="关联用例集">
+          <div class="case-select-area">
+            <div v-if="taskForm.caseSetIds.length > 0" class="case-select-tags">
+              <el-tag
+                v-for="csId in taskForm.caseSetIds"
+                :key="csId"
+                closable
+                size="small"
+                @close="taskForm.caseSetIds = taskForm.caseSetIds.filter(c => c !== csId)"
+              >
+                {{ getCaseSetLabel(csId) }}
+              </el-tag>
+            </div>
+            <el-button size="small" @click="openCaseSetSelector">
+              选择用例集
+              <el-tag v-if="taskForm.caseSetIds.length > 0" size="small" type="primary" round style="margin-left: 4px;">{{ taskForm.caseSetIds.length }}</el-tag>
+            </el-button>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -251,18 +294,55 @@
       </template>
     </el-dialog>
 
+    <!-- 用例集选择弹窗 -->
+    <el-dialog
+      v-model="caseSetSelectorVisible"
+      title="选择用例集"
+      width="500px"
+      class="branch-dialog"
+      destroy-on-close
+    >
+      <div class="case-set-select-list">
+        <div
+          v-for="cs in appStore.caseSets"
+          :key="cs.id"
+          class="case-set-select-item"
+          :class="{ selected: tempCaseSetIds.has(cs.id) }"
+          @click="toggleTempCaseSet(cs.id)"
+        >
+          <el-checkbox :checked="tempCaseSetIds.has(cs.id)" @click.stop="toggleTempCaseSet(cs.id)" />
+          <div class="case-set-select-info">
+            <span class="case-set-select-name">{{ cs.name }}</span>
+            <span class="case-set-select-count">{{ cs.caseCount || cs.caseIds?.length || 0 }} 个用例</span>
+            <span v-if="cs.description" class="case-set-select-desc">{{ cs.description }}</span>
+          </div>
+        </div>
+        <div v-if="!appStore.caseSets.length" class="case-select-empty">
+          暂无可用用例集
+        </div>
+      </div>
+      <div class="case-select-footer">
+        <span style="font-size: 12px; color: #909399;">已选 {{ tempCaseSetIds.size }} 个用例集</span>
+      </div>
+      <template #footer>
+        <el-button @click="caseSetSelectorVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmCaseSetSelection">确认 ({{ tempCaseSetIds.size }})</el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import * as api from '@/api'
 import {
-  Share, Search, Plus, Edit, Delete, ArrowDown, CircleCheck,
+  Share, Search, Plus, Edit, Delete, ArrowDown,
   QuestionFilled, List
 } from '@element-plus/icons-vue'
-import type { Branch, BranchTaskConfig } from '@/types'
+import type { Branch, TaskDef } from '@/types'
 
 const appStore = useAppStore()
 
@@ -276,72 +356,118 @@ const editingId = ref<number | null>(null)
 const taskDialogVisible = ref(false)
 const editingTaskId = ref<number | null>(null)
 const editingTaskBranchId = ref<number | null>(null)
+const deviceSelectMode = ref<'auto' | 'manual'>('auto')
 const taskForm = ref({
   name: '',
   scriptPath: '',
-  caseSets: [] as number[],
+  caseSetIds: [] as number[],
   batchSize: 10,
-  order: 1
+  deviceSelectType: 'auto' as 'auto' | 'manual',
+  deviceQuantity: 0,
+  deviceModels: [] as string[],
+  deviceIds: [] as number[],
 })
 
-const testCases = computed(() => appStore.testCases)
+// 用例集选择器
+const caseSetSelectorVisible = ref(false)
+const tempCaseSetIds = ref<Set<number>>(new Set())
+
+function getCaseSetLabel(id: number): string {
+  const cs = appStore.caseSets.find(s => s.id === id)
+  return cs ? cs.name : `ID:${id}`
+}
+
+function openCaseSetSelector() {
+  tempCaseSetIds.value = new Set(taskForm.value.caseSetIds)
+  caseSetSelectorVisible.value = true
+}
+
+function toggleTempCaseSet(id: number) {
+  if (tempCaseSetIds.value.has(id)) {
+    tempCaseSetIds.value.delete(id)
+  } else {
+    tempCaseSetIds.value.add(id)
+  }
+}
+
+function confirmCaseSetSelection() {
+  taskForm.value.caseSetIds = Array.from(tempCaseSetIds.value)
+  caseSetSelectorVisible.value = false
+}
+
+const availableModels = computed(() => {
+  const models = new Set<string>()
+  // 从 device mock 和 romRecords 收集型号
+  appStore.devices.forEach(d => { if (d.model) models.add(d.model) })
+  return Array.from(models).sort()
+})
 
 const branchTasks = (branchId: number) => {
-  return appStore.branchTaskConfigs.filter(t => t.branchId === branchId)
+  return appStore.taskDefs.filter(t => t.branchId === branchId)
 }
 
 const sortedTasks = (branchId: number) => {
-  return branchTasks(branchId).sort((a, b) => a.order - b.order)
+  return branchTasks(branchId).sort((a, b) => a.id - b.id)
 }
 
 const showAddTask = (branchId: number) => {
   editingTaskId.value = null
   editingTaskBranchId.value = branchId
-  taskForm.value = { name: '', scriptPath: '', caseSets: [], batchSize: 10, order: branchTasks(branchId).length + 1 }
-  taskDialogVisible.value = true
-}
-
-const editBranchTask = (task: BranchTaskConfig) => {
-  editingTaskId.value = task.id
-  editingTaskBranchId.value = task.branchId
+  deviceSelectMode.value = 'auto'
   taskForm.value = {
-    name: task.name,
-    scriptPath: task.scriptPath || '',
-    caseSets: [...task.caseSets],
-    batchSize: task.batchSize || 10,
-    order: task.order
+    name: '', scriptPath: '', caseSetIds: [],
+    batchSize: 10, deviceSelectType: 'auto',
+    deviceQuantity: 0, deviceModels: [], deviceIds: [],
   }
   taskDialogVisible.value = true
 }
 
-const saveBranchTask = () => {
+const editBranchTask = (task: TaskDef) => {
+  editingTaskId.value = task.id
+  editingTaskBranchId.value = task.branchId
+  deviceSelectMode.value = task.deviceSelectType || 'auto'
+  taskForm.value = {
+    name: task.name,
+    scriptPath: task.scriptPath || '',
+    caseSetIds: [...(task.caseSetIds || [])],
+    batchSize: task.batchSize || 10,
+    deviceSelectType: task.deviceSelectType || 'auto',
+    deviceQuantity: task.deviceQuantity ?? 0,
+    deviceModels: task.deviceModels ? [...task.deviceModels] : [],
+    deviceIds: task.deviceIds ? [...task.deviceIds] : [],
+  }
+  taskDialogVisible.value = true
+}
+
+const saveBranchTask = async () => {
   if (!taskForm.value.name) {
     ElMessage.warning('请输入任务名称')
     return
   }
-  if (editingTaskId.value) {
-    const task = appStore.branchTaskConfigs.find(t => t.id === editingTaskId.value)
-    if (task) {
-      task.name = taskForm.value.name
-      task.scriptPath = taskForm.value.scriptPath
-      task.caseSets = [...taskForm.value.caseSets]
-      task.batchSize = taskForm.value.batchSize
-      task.order = taskForm.value.order
-    }
-  } else {
-    appStore.branchTaskConfigs.push({
-      id: Date.now(),
-      branchId: editingTaskBranchId.value!,
-      name: taskForm.value.name,
-      scriptPath: taskForm.value.scriptPath,
-      caseSets: [...taskForm.value.caseSets],
-      batchSize: taskForm.value.batchSize,
-      order: taskForm.value.order,
-      createdAt: new Date().toISOString()
-    })
+  const body = {
+    branch_id: editingTaskBranchId.value!,
+    name: taskForm.value.name,
+    script_path: taskForm.value.scriptPath || '',
+    case_set_ids: [...taskForm.value.caseSetIds],
+    batch_size: taskForm.value.batchSize,
+    device_select_type: deviceSelectMode.value,
+    device_quantity: deviceSelectMode.value === 'auto' ? taskForm.value.deviceQuantity : 0,
+    device_models: deviceSelectMode.value === 'auto' ? [...taskForm.value.deviceModels] : [],
+    device_ids: deviceSelectMode.value === 'manual' ? [...taskForm.value.deviceIds] : [],
   }
-  taskDialogVisible.value = false
-  ElMessage.success(editingTaskId.value ? '任务已更新' : '任务已添加')
+  try {
+    if (editingTaskId.value) {
+      await api.updateTaskDef(editingTaskId.value, body)
+    } else {
+      await api.createTaskDef(body)
+    }
+    await appStore.fetchBranches()
+    taskDialogVisible.value = false
+    ElMessage.success(editingTaskId.value ? '任务已更新' : '任务已添加')
+  } catch (e) {
+    console.error('保存任务失败:', e)
+    ElMessage.error('保存任务失败，请重试')
+  }
 }
 
 const deleteBranchTask = async (taskId: number) => {
@@ -349,9 +475,10 @@ const deleteBranchTask = async (taskId: number) => {
     await ElMessageBox.confirm('确定要删除此任务配置吗？', '确认删除', {
       type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
     })
-    appStore.branchTaskConfigs = appStore.branchTaskConfigs.filter(t => t.id !== taskId)
+    await api.deleteTaskDef(taskId)
+    await appStore.fetchBranches()
     ElMessage.success('任务已删除')
-  } catch { /* canceled */ }
+  } catch { /* canceled or API error */ }
 }
 
 const branches = computed(() => appStore.branches)
@@ -496,6 +623,13 @@ const deleteBranch = async (id: number) => {
     ElMessage.success('分支已删除')
   } catch { /* canceled */ }
 }
+
+onMounted(() => {
+  appStore.fetchBranches()
+  appStore.fetchDevices()
+  appStore.fetchTestCases()
+  appStore.fetchCaseSets()
+})
 </script>
 
 <style scoped>
@@ -810,6 +944,106 @@ const deleteBranch = async (id: number) => {
   align-items: center;
   justify-content: center;
   margin: 0 auto;
+}
+
+/* ==================== 用例选择弹窗 ==================== */
+.case-select-area {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.case-select-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.case-set-quick-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+
+.case-set-quick-label {
+  font-size: 12px;
+  color: #909399;
+  white-space: nowrap;
+}
+
+.case-select-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+}
+
+.case-select-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.case-select-item:last-child {
+  border-bottom: none;
+}
+
+.case-select-item:hover {
+  background: #f5f7fa;
+}
+
+.case-select-item.selected {
+  background: #ecf5ff;
+}
+
+.case-select-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.case-select-id {
+  font-size: 13px;
+  font-weight: 600;
+  color: #409eff;
+  min-width: 70px;
+}
+
+.case-select-name {
+  font-size: 13px;
+  color: #303133;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-select-empty {
+  padding: 24px;
+  text-align: center;
+  color: #c0c4cc;
+  font-size: 13px;
+}
+
+.case-select-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
 }
 
 /* ==================== 响应式 ==================== */

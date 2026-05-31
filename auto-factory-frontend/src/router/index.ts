@@ -26,9 +26,9 @@ const routes = [
     component: () => import('@/views/Flashing/index.vue')
   },
   {
-    path: '/rom-track',
-    name: 'RomTrack',
-    component: () => import('@/views/RomTrack/index.vue')
+    path: '/version-track',
+    name: 'VersionTrack',
+    component: () => import('@/views/VersionTrack/index.vue')
   },
   {
     path: '/task',

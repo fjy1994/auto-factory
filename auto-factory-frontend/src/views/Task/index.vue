@@ -14,9 +14,10 @@
           <el-option label="全部" value="" />
           <el-option label="排队中" value="queued" />
           <el-option label="运行中" value="running" />
-          <el-option label="已完成" value="success" />
+          <el-option label="已完成" value="completed" />
           <el-option label="失败" value="failed" />
         </el-select>
+        <el-button size="small" :icon="Search" @click="handleSearch">查询</el-button>
         <el-button type="primary" size="small" :icon="Plus" @click="createTask">
           新建任务
         </el-button>
@@ -54,11 +55,6 @@
             </div>
             <div class="task-meta">
               <span class="meta-chip">
-                <el-icon :size="12"><Monitor /></el-icon>
-                {{ task.deviceSerial || '-' }}
-              </span>
-              <span class="meta-divider">|</span>
-              <span class="meta-chip">
                 <el-icon :size="12"><Share /></el-icon>
                 {{ task.branchName || '-' }}
               </span>
@@ -78,9 +74,9 @@
               type="circle"
             />
           </div>
-          <div class="task-duration" v-else-if="task.duration">
-            <div class="duration-value">{{ task.duration }}</div>
-            <div class="duration-label">耗时</div>
+          <div class="task-pass-rate" v-else-if="task.passRate !== undefined && task.passRate !== null">
+            <div class="duration-value">{{ task.passRate }}%</div>
+            <div class="duration-label">通过率</div>
           </div>
         </div>
 
@@ -90,62 +86,43 @@
             <el-divider style="margin: 10px 0;" />
             <div class="detail-grid">
               <div class="detail-item">
-                <span class="detail-label">设备</span>
-                <span class="detail-value">{{ task.model }}</span>
-              </div>
-              <div class="detail-item">
                 <span class="detail-label">分支</span>
                 <span class="detail-value">{{ task.branchName || '-' }}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">版本标签</span>
+                <span class="detail-value">{{ task.versionLabel || '-' }}</span>
               </div>
               <div class="detail-item">
                 <span class="detail-label">创建时间</span>
                 <span class="detail-value">{{ task.createdAt }}</span>
               </div>
-              <div class="detail-item">
-                <span class="detail-label">版本</span>
-                <span class="detail-value">{{ task.version || '-' }}</span>
-              </div>
-              <div class="detail-item full-width" v-if="task.log">
-                <span class="detail-label">执行日志</span>
-                <div class="log-box">{{ task.log }}</div>
+              <div class="detail-item" v-if="task.passRate !== undefined">
+                <span class="detail-label">通过率</span>
+                <span class="detail-value">{{ task.passRate }}%</span>
               </div>
             </div>
             <div class="detail-actions">
               <el-button size="small" type="success" plain @click="startTaskExec(task)" v-if="task.status === 'queued'">
                 <el-icon :size="14"><VideoPlay /></el-icon> 开始执行
               </el-button>
-              <el-button size="small" type="primary" plain @click="rerunTask(task)" v-if="task.status === 'failed'">
-                <el-icon :size="14"><Refresh /></el-icon> 重新运行
-              </el-button>
               <el-button size="small" type="danger" plain @click="cancelTask(task)" v-if="task.status === 'queued' || task.status === 'running'">
                 <el-icon :size="14"><CircleClose /></el-icon> 取消任务
               </el-button>
             </div>
 
-            <!-- 用例执行结果 -->
-            <div v-if="task.caseResults && task.caseResults.length > 0" class="case-results-section">
+            <!-- 用例执行结果（可通过 fetchTaskResults 单独获取） -->
+            <div v-if="task.totalCount && task.totalCount > 0" class="task-summary">
               <el-divider style="margin: 10px 0;" />
-              <div class="section-title">用例执行结果</div>
-              <div class="case-result-grid">
-                <div
-                  v-for="r in task.caseResults"
-                  :key="r.caseId"
-                  class="case-result-item"
-                  :class="'status-' + r.status"
-                >
-                  <div class="cr-top">
-                    <el-tag :type="r.status === 'passed' ? 'success' : r.status === 'failed' ? 'danger' : 'warning'" size="small" effect="dark" round>
-                      {{ r.status === 'passed' ? '通过' : r.status === 'failed' ? '失败' : '错误' }}
-                    </el-tag>
-                    <span class="cr-id">{{ r.caseId }}</span>
-                  </div>
-                  <div class="cr-meta" v-if="r.duration">
-                    耗时: {{ r.duration.toFixed(1) }}s
-                  </div>
-                  <div class="cr-error" v-if="r.error">
-                    {{ r.error.slice(0, 200) }}
-                  </div>
-                </div>
+              <div class="summary-row">
+                <span class="summary-label">总用例:</span>
+                <span>{{ task.totalCount }}</span>
+                <span class="summary-divider">|</span>
+                <span class="summary-label">通过:</span>
+                <span style="color: #67c23a;">{{ task.passCount || 0 }}</span>
+                <span class="summary-divider">|</span>
+                <span class="summary-label">失败:</span>
+                <span style="color: #f56c6c;">{{ task.failCount || 0 }}</span>
               </div>
             </div>
           </div>
@@ -178,12 +155,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  List, Plus, Refresh, Monitor, Share, Clock, CircleClose, VideoPlay
+  List, Plus, Refresh, Share, Clock, CircleClose, VideoPlay, Search
 } from '@element-plus/icons-vue'
 import type { Task } from '@/types'
 import { startTask } from '@/api'
@@ -196,38 +173,39 @@ const selectedId = ref<number | null>(null)
 
 const tasks = computed(() => appStore.tasks)
 
-const filteredTasks = computed(() => {
-  let result = tasks.value
-  if (statusFilter.value) {
-    result = result.filter(t => t.status === statusFilter.value)
-  }
-  return result
-})
+const filteredTasks = ref<Task[]>([])
 
 const currentPage = ref(1)
-const pageSize = 20
+const pageSize = 10
 const pagedTasks = computed(() => {
   const start = (currentPage.value - 1) * pageSize
   return filteredTasks.value.slice(start, start + pageSize)
 })
 
-watch(statusFilter, () => { currentPage.value = 1 })
+const handleSearch = () => {
+  currentPage.value = 1
+  let result = tasks.value
+  if (statusFilter.value) {
+    result = result.filter(t => t.status === statusFilter.value)
+  }
+  filteredTasks.value = result
+}
 
 const taskStats = computed(() => [
   { key: 'total', label: '总任务', count: tasks.value.length, color: '#409eff' },
   { key: 'queued', label: '排队中', count: tasks.value.filter(t => t.status === 'queued').length, color: '#e6a23c' },
   { key: 'running', label: '运行中', count: tasks.value.filter(t => t.status === 'running').length, color: '#409eff' },
-  { key: 'success', label: '已完成', count: tasks.value.filter(t => t.status === 'success').length, color: '#67c23a' },
-  { key: 'failed', label: '失败', count: tasks.value.filter(t => t.status === 'failed').length, color: '#f56c6c' }
+  { key: 'completed', label: '已完成', count: tasks.value.filter(t => t.status === 'completed').length, color: '#67c23a' },
+  { key: 'failed', label: '有失败', count: tasks.value.filter(t => t.status === 'completed' && (t.failCount ?? 0) > 0).length, color: '#f56c6c' }
 ])
 
 const statusType = (s: string) => {
-  const map: Record<string, string> = { queued: 'warning', running: 'primary', success: 'success', failed: 'danger' }
+  const map: Record<string, string> = { queued: 'warning', running: 'primary', completed: 'success', failed: 'info' }
   return map[s] || 'info'
 }
 
 const statusText = (s: string) => {
-  const map: Record<string, string> = { queued: '排队中', running: '运行中', success: '已完成', failed: '失败' }
+  const map: Record<string, string> = { queued: '排队中', running: '运行中', completed: '已完成', failed: '失败' }
   return map[s] || s
 }
 
@@ -246,43 +224,28 @@ const createTask = () => {
   ElMessage.success('新建任务功能已打开')
 }
 
-const rerunTask = (task: Task) => {
-  ElMessage.success(`任务 "${task.name}" 已重新提交`)
-}
-
 const cancelTask = (task: Task) => {
   ElMessage.warning(`任务 "${task.name}" 已取消`)
 }
 
 const startTaskExec = async (task: Task) => {
-  // 弹出输入框让用户输入 Agent 地址
-  const { value: agentUrl } = await ElMessageBox.prompt(
-    '请输入 Agent 服务地址（如 http://192.168.1.100:8000）',
-    '启动任务执行',
-    {
-      confirmButtonText: '启动',
-      cancelButtonText: '取消',
-      inputValue: task.agentUrl || '',
-      inputPlaceholder: 'http://192.168.1.100:8000',
-    }
-  ).catch(() => ({ value: null }))
-
-  if (!agentUrl) return
-
   try {
-    await startTask(task.id, agentUrl)
+    await ElMessageBox.confirm('确定启动任务「' + task.name + '」吗？', '启动确认')
+    await startTask(task.id)
     ElMessage.success('任务调度已启动')
     task.status = 'running'
-    task.agentUrl = agentUrl
     task.startTime = new Date().toISOString()
-    appStore.fetchAll() // 刷新数据
+    appStore.fetchTasks() // 刷新数据
   } catch (e: any) {
+    if (e?.__isCancel__ || e === 'cancel') return
     ElMessage.error('启动失败: ' + (e.response?.data?.error || e.message))
   }
 }
 
 // 从版本跟踪跳转过来时自动选中对应任务
 onMounted(async () => {
+  await appStore.fetchTasks()
+  handleSearch()
   const focus = route.query.focus
   if (focus) {
     const id = parseInt(focus as string, 10)
